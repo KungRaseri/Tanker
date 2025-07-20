@@ -1,0 +1,16 @@
+{
+  "Name": "Tanker",
+  "Author": "KungRaseri",
+  "Description": "A Mod that adds a new entity type called the Tanker.",
+  "ModVersion": "1.0",
+  "GameVersion": "1.21+",
+  "ThumbnailPath": "sprites/placeholder.png",
+  "EntryPoint": "Tanker.TankerMod",
+  "Tags": [],
+  "Scripts": [
+    "TankerMod.cs"
+  ],
+  "Active": true,
+  "UGCIdentity": null,
+  "CreatorUGCIdentity": null
+}
