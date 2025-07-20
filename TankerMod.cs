@@ -126,25 +126,38 @@ namespace Tanker
     public class TankerMoltenComponent : MonoBehaviour
     {
         public PersonBehaviour person;
+        private Texture2D originalSkin;
+        private Texture2D originalFlesh;
+        private Texture2D originalBone;
 
         void Start()
         {
-            // Increase damage resistance when molten mode is active
+            // Store original textures before changing
             if (person != null)
             {
-                var skin = ModAPI.LoadTexture("Sprites/skin_KIAREKAKAMI_PURE_RAGE_PPG.png");
-                var flesh = ModAPI.LoadTexture("Sprites/Tanker-flesh.png");
-                var bone = ModAPI.LoadTexture("Sprites/Tanker-bone.png");
-                person.SetBodyTextures(skin, flesh, bone, 1);
+                // Store original textures (we'll load them again to be safe)
+                originalSkin = ModAPI.LoadTexture("Sprites/Tanker-skin.png");
+                originalFlesh = ModAPI.LoadTexture("Sprites/Tanker-flesh.png");
+                originalBone = ModAPI.LoadTexture("Sprites/Tanker-bone.png");
+
+                // Apply molten textures
+                var moltenSkin = ModAPI.LoadTexture("Sprites/skin_KIAREKAKAMI_PURE_RAGE_PPG.png");
+                var moltenFlesh = ModAPI.LoadTexture("Sprites/skin_KIAREKAKAMI_PURE_RAGE_PPG.png");
+                var moltenBone = ModAPI.LoadTexture("Sprites/skin_KIAREKAKAMI_PURE_RAGE_PPG.png");
+                
+                person.SetBodyTextures(moltenSkin, moltenFlesh, moltenBone, 1);
+                
+                ModAPI.Notify("Molten textures applied!");
             }
         }
 
         void OnDestroy()
         {
-            // Restore normal values when molten mode is disabled
-            if (person != null)
+            // Restore original textures when molten mode is disabled
+            if (person != null && originalSkin != null)
             {
-
+                person.SetBodyTextures(originalSkin, originalFlesh, originalBone, 1);
+                ModAPI.Notify("Original textures restored!");
             }
         }
     }
