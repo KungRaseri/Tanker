@@ -132,35 +132,40 @@ namespace Tanker
 
         void Start()
         {
+            ModAPI.Notify("TankerMoltenComponent Start() called");
+
             if (person != null)
             {
+                ModAPI.Notify("Person is not null, starting texture change process");
+
                 // Store original textures
                 originalSkin = ModAPI.LoadTexture("Sprites/Tanker-skin.png");
                 originalFlesh = ModAPI.LoadTexture("Sprites/Tanker-flesh.png");
                 originalBone = ModAPI.LoadTexture("Sprites/Tanker-bone.png");
 
-                // Start the molten texture application process
-                StartCoroutine(ApplyMoltenTexturesDelayed());
+                // Apply molten textures immediately
+                ApplyMoltenTextures();
+            }
+            else
+            {
+                ModAPI.Notify("Person is null! Cannot apply textures");
             }
         }
 
-        private System.Collections.IEnumerator ApplyMoltenTexturesDelayed()
+        private void ApplyMoltenTextures()
         {
-            // Wait a short moment to ensure everything is initialized
-            yield return new WaitForSeconds(0.1f);
-            
+            ModAPI.Notify("ApplyMoltenTextures method started");
+
             var moltenTexture = ModAPI.LoadTexture("Sprites/skin_KIAREKAKAMI_PURE_RAGE_PPG.png");
-            
+
             if (moltenTexture != null)
             {
-                ModAPI.Notify("Applying molten texture...");
-                
+                ModAPI.Notify($"Molten texture loaded successfully! Size: {moltenTexture.width}x{moltenTexture.height}");
+
                 // Method 1: Use SetBodyTextures
                 person.SetBodyTextures(moltenTexture, moltenTexture, moltenTexture, 1f);
-                
-                // Wait a frame and try again
-                yield return new WaitForEndOfFrame();
-                
+                ModAPI.Notify("SetBodyTextures called");
+
                 // Method 2: Force sync on all skin material handlers
                 foreach (var limb in person.Limbs)
                 {
@@ -170,28 +175,30 @@ namespace Tanker
                         skinHandler.Sync();
                     }
                 }
-                
-                // Method 3: Try a different approach - force material update
-                yield return new WaitForEndOfFrame();
-                
-                // Create a new material with the molten texture
-                var moltenMaterial = new Material(person.DefaultMaterial);
-                moltenMaterial.mainTexture = moltenTexture;
-                
-                foreach (var limb in person.Limbs)
+                ModAPI.Notify("SkinMaterialHandler Sync called on all limbs");
+
+                // Method 3: Try material update
+                if (person.DefaultMaterial != null)
                 {
-                    var skinHandler = limb.GetComponent<SkinMaterialHandler>();
-                    if (skinHandler != null && skinHandler.renderer != null)
+                    var moltenMaterial = new Material(person.DefaultMaterial);
+                    moltenMaterial.mainTexture = moltenTexture;
+
+                    foreach (var limb in person.Limbs)
                     {
-                        skinHandler.renderer.material = moltenMaterial;
+                        var skinHandler = limb.GetComponent<SkinMaterialHandler>();
+                        if (skinHandler != null && skinHandler.renderer != null)
+                        {
+                            skinHandler.renderer.material = moltenMaterial;
+                        }
                     }
+                    ModAPI.Notify("Material-based texture application completed");
                 }
-                
-                ModAPI.Notify("Molten textures applied!");
+
+                ModAPI.Notify("Molten textures applied successfully!");
             }
             else
             {
-                ModAPI.Notify("Failed to load molten texture!");
+                ModAPI.Notify("Failed to load molten texture! Check file path: Sprites/skin_KIAREKAKAMI_PURE_RAGE_PPG.png");
             }
         }
 
@@ -201,7 +208,7 @@ namespace Tanker
             if (person != null && originalSkin != null)
             {
                 person.SetBodyTextures(originalSkin, originalFlesh, originalBone, 1f);
-                
+
                 // Also restore the original material
                 foreach (var limb in person.Limbs)
                 {
@@ -212,7 +219,7 @@ namespace Tanker
                         skinHandler.Sync();
                     }
                 }
-                
+
                 ModAPI.Notify("Original textures restored!");
             }
         }
