@@ -132,22 +132,66 @@ namespace Tanker
 
         void Start()
         {
-            // Store original textures before changing
             if (person != null)
             {
-                // Store original textures (we'll load them again to be safe)
+                // Store original textures
                 originalSkin = ModAPI.LoadTexture("Sprites/Tanker-skin.png");
                 originalFlesh = ModAPI.LoadTexture("Sprites/Tanker-flesh.png");
                 originalBone = ModAPI.LoadTexture("Sprites/Tanker-bone.png");
 
-                // Apply molten textures
-                var moltenSkin = ModAPI.LoadTexture("Sprites/skin_KIAREKAKAMI_PURE_RAGE_PPG.png");
-                var moltenFlesh = ModAPI.LoadTexture("Sprites/skin_KIAREKAKAMI_PURE_RAGE_PPG.png");
-                var moltenBone = ModAPI.LoadTexture("Sprites/skin_KIAREKAKAMI_PURE_RAGE_PPG.png");
+                // Start the molten texture application process
+                StartCoroutine(ApplyMoltenTexturesDelayed());
+            }
+        }
+
+        private System.Collections.IEnumerator ApplyMoltenTexturesDelayed()
+        {
+            // Wait a short moment to ensure everything is initialized
+            yield return new WaitForSeconds(0.1f);
+            
+            var moltenTexture = ModAPI.LoadTexture("Sprites/skin_KIAREKAKAMI_PURE_RAGE_PPG.png");
+            
+            if (moltenTexture != null)
+            {
+                ModAPI.Notify("Applying molten texture...");
                 
-                person.SetBodyTextures(moltenSkin, moltenFlesh, moltenBone, 1);
+                // Method 1: Use SetBodyTextures
+                person.SetBodyTextures(moltenTexture, moltenTexture, moltenTexture, 1f);
+                
+                // Wait a frame and try again
+                yield return new WaitForEndOfFrame();
+                
+                // Method 2: Force sync on all skin material handlers
+                foreach (var limb in person.Limbs)
+                {
+                    var skinHandler = limb.GetComponent<SkinMaterialHandler>();
+                    if (skinHandler != null)
+                    {
+                        skinHandler.Sync();
+                    }
+                }
+                
+                // Method 3: Try a different approach - force material update
+                yield return new WaitForEndOfFrame();
+                
+                // Create a new material with the molten texture
+                var moltenMaterial = new Material(person.DefaultMaterial);
+                moltenMaterial.mainTexture = moltenTexture;
+                
+                foreach (var limb in person.Limbs)
+                {
+                    var skinHandler = limb.GetComponent<SkinMaterialHandler>();
+                    if (skinHandler != null && skinHandler.renderer != null)
+                    {
+                        skinHandler.renderer.material = moltenMaterial;
+                    }
+                }
                 
                 ModAPI.Notify("Molten textures applied!");
+            }
+            else
+            {
+                ModAPI.Notify("Failed to load molten texture!");
             }
         }
 
@@ -156,7 +200,19 @@ namespace Tanker
             // Restore original textures when molten mode is disabled
             if (person != null && originalSkin != null)
             {
-                person.SetBodyTextures(originalSkin, originalFlesh, originalBone, 1);
+                person.SetBodyTextures(originalSkin, originalFlesh, originalBone, 1f);
+                
+                // Also restore the original material
+                foreach (var limb in person.Limbs)
+                {
+                    var skinHandler = limb.GetComponent<SkinMaterialHandler>();
+                    if (skinHandler != null && skinHandler.renderer != null)
+                    {
+                        skinHandler.renderer.material = person.ChosenMaterial;
+                        skinHandler.Sync();
+                    }
+                }
+                
                 ModAPI.Notify("Original textures restored!");
             }
         }
