@@ -282,16 +282,16 @@ namespace Tanker
 
         private void ConfigureSteamParticles(ParticleSystem particles)
         {
-            // Main module - basic particle properties
+            // Main module - basic particle properties for steam
             var main = particles.main;
-            main.startLifetime = new ParticleSystem.MinMaxCurve(3.0f, 5.0f); // Longer lasting steam
-            main.startSpeed = new ParticleSystem.MinMaxCurve(0.3f, 0.8f); // Slower, more steam-like
-            main.startSize = new ParticleSystem.MinMaxCurve(0.05f, 0.15f); // Small start size
-            main.startColor = new ParticleSystem.MinMaxGradient(new Color(0.7f, 0.7f, 0.7f, 0.8f), new Color(0.8f, 0.8f, 0.8f, 0.6f)); // Warm steam colors
-            main.maxParticles = 50; // More particles for dense steam
+            main.startLifetime = new ParticleSystem.MinMaxCurve(2.0f, 4.0f); // Steam lifespan
+            main.startSpeed = new ParticleSystem.MinMaxCurve(0.1f, 0.4f); // Slower, drifting steam
+            main.startSize = new ParticleSystem.MinMaxCurve(0.02f, 0.08f); // Start very small
+            main.startColor = new ParticleSystem.MinMaxGradient(new Color(0.9f, 0.9f, 0.9f, 1f), new Color(0.7f, 0.7f, 0.7f, 1f)); // Light gray steam
+            main.maxParticles = 40; // Fewer particles for wispy effect
             main.simulationSpace = ParticleSystemSimulationSpace.World;
             main.startRotation = new ParticleSystem.MinMaxCurve(0f, 360f); // Random rotation
-            main.gravityModifier = -0.1f; // Slight upward force
+            main.gravityModifier = -0.05f; // Very light upward drift
 
             // Configure renderer for proper material
             var renderer = particles.GetComponent<ParticleSystemRenderer>();
@@ -299,7 +299,7 @@ namespace Tanker
             {
                 // Try different shader approaches for compatibility
                 Material steamMaterial = null;
-                
+
                 // Try 1: Standard Sprites shader
                 var spritesShader = Shader.Find("Sprites/Default");
                 if (spritesShader != null)
@@ -324,43 +324,43 @@ namespace Tanker
                         }
                     }
                 }
-                
+
                 if (steamMaterial != null)
                 {
                     steamMaterial.color = Color.white;
                     renderer.material = steamMaterial;
-                    
-                    // Create a simple white circle texture for the particles
-                    Texture2D circleTexture = CreateCircleTexture(64);
-                    steamMaterial.mainTexture = circleTexture;
+
+                    // Create a wispy steam texture for the particles
+                    Texture2D steamTexture = CreateSteamTexture(128);
+                    steamMaterial.mainTexture = steamTexture;
                 }
             }
 
-            // Emission - continuous steam generation
+            // Emission - lighter steam emission
             var emission = particles.emission;
-            emission.rateOverTime = 15f; // Dense steam emission
+            emission.rateOverTime = 10f; // Lighter steam emission
 
             // Shape - emit from around the limb surface
             var shape = particles.shape;
             shape.enabled = true;
             shape.shapeType = ParticleSystemShapeType.Circle;
-            shape.radius = 0.08f; // Larger emission area
-            shape.radiusThickness = 0.8f; // Emit from edge, not center
+            shape.radius = 0.03f; // Smaller emission area for more focused steam
+            shape.radiusThickness = 0.75f; // Emit from edge only
 
-            // Velocity over lifetime - steam rises and spreads
+            // Velocity over lifetime - steam rises and drifts
             var velocityOverLifetime = particles.velocityOverLifetime;
             velocityOverLifetime.enabled = true;
             velocityOverLifetime.space = ParticleSystemSimulationSpace.World;
-            velocityOverLifetime.y = new ParticleSystem.MinMaxCurve(0.5f, 0.9f); // Rise upward
-            velocityOverLifetime.x = new ParticleSystem.MinMaxCurve(-0.2f, 0.2f); // Slight horizontal drift
-            
-            // Size over lifetime - steam expands as it rises
+            velocityOverLifetime.y = new ParticleSystem.MinMaxCurve(0.3f, 0.7f); // Gentle rise
+            velocityOverLifetime.x = new ParticleSystem.MinMaxCurve(-0.15f, 0.15f); // Light horizontal drift
+
+            // Size over lifetime - steam grows and stretches
             var sizeOverLifetime = particles.sizeOverLifetime;
             sizeOverLifetime.enabled = true;
             AnimationCurve sizeCurve = new AnimationCurve();
-            sizeCurve.AddKey(0f, 0.3f); // Start small
-            sizeCurve.AddKey(0.5f, 1.0f); // Expand in middle
-            sizeCurve.AddKey(1f, 2.5f); // Large at end
+            sizeCurve.AddKey(0f, 0.4f); // Start small
+            sizeCurve.AddKey(0.5f, 1.2f); // Grow quickly
+            sizeCurve.AddKey(1f, 3.0f); // Spread out and dissipate
             sizeOverLifetime.size = new ParticleSystem.MinMaxCurve(1f, sizeCurve);
 
             // Color over lifetime - fade from warm to transparent
@@ -368,12 +368,12 @@ namespace Tanker
             colorOverLifetime.enabled = true;
             Gradient gradient = new Gradient();
             gradient.SetKeys(
-                new GradientColorKey[] { 
+                new GradientColorKey[] {
                     new GradientColorKey(new Color(0.8f, 0.8f, 0.8f), 0.0f), // Warm start
                     new GradientColorKey(new Color(0.8f, 0.8f, 0.8f), 0.6f), // Cool middle
                     new GradientColorKey(new Color(0.6f, 0.6f, 0.6f), 1.0f)  // Gray end
                 },
-                new GradientAlphaKey[] { 
+                new GradientAlphaKey[] {
                     new GradientAlphaKey(0.8f, 0.0f), // Start visible
                     new GradientAlphaKey(0.6f, 0.3f), // Peak visibility
                     new GradientAlphaKey(0.0f, 1.0f)  // Fade out completely
@@ -381,17 +381,17 @@ namespace Tanker
             );
             colorOverLifetime.color = gradient;
 
-            // Rotation over lifetime - steam swirls
+            // Rotation over lifetime - gentle steam swirl
             var rotationOverLifetime = particles.rotationOverLifetime;
             rotationOverLifetime.enabled = true;
-            rotationOverLifetime.z = new ParticleSystem.MinMaxCurve(-30f, 30f); // Slow swirl
+            rotationOverLifetime.z = new ParticleSystem.MinMaxCurve(-15f, 15f); // Gentler swirl
 
-            // Noise module - add turbulence for realistic steam movement
+            // Noise module - add subtle turbulence for realistic steam movement
             var noise = particles.noise;
             noise.enabled = true;
-            noise.strength = 0.3f;
-            noise.frequency = 0.5f;
-            noise.scrollSpeed = 0.5f;
+            noise.strength = 0.2f; // Lighter turbulence
+            noise.frequency = 0.3f; // Lower frequency for smoother movement
+            noise.scrollSpeed = 0.3f; // Slower scroll for gentle drift
             noise.damping = true;
 
             // Texture sheet animation - if we want animated sprites (optional)
@@ -402,7 +402,7 @@ namespace Tanker
         private void RemoveVaporParticles()
         {
             vaporActive = false;
-            
+
             // Clean up all particle systems
             foreach (var particleSystem in vaporParticleSystems)
             {
@@ -414,35 +414,57 @@ namespace Tanker
             vaporParticleSystems.Clear();
         }
 
-        private Texture2D CreateCircleTexture(int size)
+        private Texture2D CreateSteamTexture(int size)
         {
             Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
             Color[] pixels = new Color[size * size];
-            
+
             Vector2 center = new Vector2(size / 2f, size / 2f);
-            float radius = size / 2f - 2f; // Leave small border
-            
+
             for (int y = 0; y < size; y++)
             {
                 for (int x = 0; x < size; x++)
                 {
                     Vector2 pos = new Vector2(x, y);
-                    float distance = Vector2.Distance(pos, center);
-                    
-                    if (distance <= radius)
+                    Vector2 offset = pos - center;
+
+                    // Create an elongated, wispy shape
+                    float normalizedX = offset.x / (size / 3f);
+                    float normalizedY = offset.y / (size / 1.5f);
+
+                    // Create a soft, elongated shape that's wider at the bottom
+                    float verticalFactor = Mathf.Clamp01(1f - Mathf.Abs(normalizedY));
+                    float horizontalFactor = Mathf.Clamp01(1f - Mathf.Abs(normalizedX));
+
+                    // Make it more elongated and wispy
+                    float steamShape = verticalFactor * horizontalFactor;
+
+                    // Add some noise for wispy effect
+                    float noise = Mathf.PerlinNoise(x * 0.1f, y * 0.1f) * 0.3f;
+                    steamShape = Mathf.Clamp01(steamShape + noise - 0.2f);
+
+                    // Create soft falloff
+                    float distance = Vector2.Distance(pos, center) / (size / 2f);
+                    float falloff = Mathf.Clamp01(1f - distance);
+                    falloff = Mathf.Pow(falloff, 0.8f); // Soft edge
+
+                    float alpha = steamShape * falloff;
+
+                    // Make bottom heavier and top lighter for realistic steam
+                    if (normalizedY < 0) // Bottom half
                     {
-                        // Create soft circular gradient
-                        float alpha = 1f - (distance / radius);
-                        alpha = Mathf.Pow(alpha, 0.5f); // Soft falloff
-                        pixels[y * size + x] = new Color(1f, 1f, 1f, alpha);
+                        alpha *= 1.2f;
                     }
-                    else
+                    else // Top half
                     {
-                        pixels[y * size + x] = Color.clear;
+                        alpha *= 0.6f;
                     }
+
+                    alpha = Mathf.Clamp01(alpha);
+                    pixels[y * size + x] = new Color(1f, 1f, 1f, alpha);
                 }
             }
-            
+
             texture.SetPixels(pixels);
             texture.Apply();
             texture.wrapMode = TextureWrapMode.Clamp;
