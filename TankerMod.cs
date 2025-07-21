@@ -61,6 +61,9 @@ namespace Tanker
 
             // Apply custom skin texture to the person
             SetEntityTextures();
+
+            // Set up tanker initial stats
+            SetTankerStats();
         }
 
         private void LoadTextures()
@@ -83,6 +86,21 @@ namespace Tanker
             if (originalSkin != null && originalFlesh != null && originalBone != null)
             {
                 person.SetBodyTextures(originalSkin, originalFlesh, originalBone, 1);
+            }
+        }
+
+        private void SetTankerStats()
+        {
+            // Set up any special abilities or attributes for the Tanker
+            // This could include things like increased health, special attacks, etc.
+            foreach (var limb in person.Limbs)
+            {
+                // Example: Increase health of each limb
+                limb.InitialHealth *= 2; // Double the initial health for durability
+                limb.Health = limb.InitialHealth; // Reset current health to match
+
+                limb.ImpactDamageMultiplier = 0.5f; // Reduce impact damage taken by limbs
+                limb.ShotDamageMultiplier = 0.5f; // Reduce shot damage taken by limbs
             }
         }
 
@@ -159,15 +177,14 @@ namespace Tanker
         private void EnableMoltenMode()
         {
             ClearModes();
-            
+
             isMoltenMode = true;
 
             if (moltenTexture != null)
             {
-                // Method 1: Use SetBodyTextures with molten texture
                 person.SetBodyTextures(moltenTexture, moltenTexture, moltenTexture, 1f);
 
-                ModAPI.Notify("Molten mode activated! Textures applied.");
+                ModAPI.Notify("Molten mode activated!");
             }
         }
 
