@@ -19,6 +19,9 @@ namespace Tanker
         public Texture2D moltenTexture;
         public Texture2D ultraSenseTexture;
 
+        // Particle systems for vapor effects
+        private List<GameObject> vaporParticles = new List<GameObject>();
+
         public static void Main()
         {
             ModAPI.Register(
@@ -184,6 +187,9 @@ namespace Tanker
             {
                 person.SetBodyTextures(moltenTexture, moltenTexture, moltenTexture, 1f);
 
+                // Create vapor particles on each limb
+                CreateVaporParticles();
+
                 ModAPI.Notify("Molten mode activated!");
             }
         }
@@ -196,6 +202,9 @@ namespace Tanker
             {
                 // Restore original textures
                 person.SetBodyTextures(originalSkin, originalFlesh, originalBone, 1f);
+
+                // Remove vapor particles
+                RemoveVaporParticles();
 
                 ModAPI.Notify("Molten mode deactivated! Original textures restored.");
             }
@@ -244,6 +253,37 @@ namespace Tanker
                           $"Ultra Sense Mode: {(isUltraSenseMode ? "ACTIVE" : "INACTIVE")}\n";
 
             ModAPI.Notify(status);
+        }
+
+        private void CreateVaporParticles()
+        {
+            // Remove any existing particles first
+            RemoveVaporParticles();
+
+            foreach (var limb in person.Limbs)
+            {
+                vaporParticles.Add(ModAPI.CreateParticleEffect("Vapor", limb.transform.position));
+            }
+
+            ModAPI.Notify($"Created vapor particles on {vaporParticles.Count} limbs");
+        }
+
+        private void RemoveVaporParticles()
+        {
+            foreach (var particles in vaporParticles)
+            {
+                if (particles != null && particles.gameObject != null)
+                {
+                    UnityEngine.Object.Destroy(particles.gameObject);
+                }
+            }
+            vaporParticles.Clear();
+        }
+
+        void OnDestroy()
+        {
+            // Clean up particles when the component is destroyed
+            RemoveVaporParticles();
         }
     }
 }
