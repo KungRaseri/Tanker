@@ -20,9 +20,8 @@ namespace Tanker
         public Texture2D ultraSenseTexture;
 
         // Particle systems for vapor effects
-        private List<GameObject> vaporParticles = new List<GameObject>();
+        private List<ParticleSystem> vaporParticleSystems = new List<ParticleSystem>();
         private bool vaporActive = false;
-        private Coroutine vaporCoroutine;
 
         public static void Main()
         {
@@ -263,79 +262,113 @@ namespace Tanker
             RemoveVaporParticles();
 
             vaporActive = true;
+
+            foreach (var limb in person.Limbs)
+            {
+                // Create a new GameObject for the particle system
+                GameObject particleGO = new GameObject("SteamVapor");
+                particleGO.transform.SetParent(limb.transform);
+                particleGO.transform.localPosition = Vector3.zero;
+
+                // Add and configure the particle system for steamy vapor
+                ParticleSystem particles = particleGO.AddComponent<ParticleSystem>();
+                ConfigureSteamParticles(particles);
+
+                vaporParticleSystems.Add(particles);
+            }
+
+            ModAPI.Notify($"Created custom steam vapor on {vaporParticleSystems.Count} limbs");
+        }
+
+        private void ConfigureSteamParticles(ParticleSystem particles)
+        {
+            // Main module - basic particle properties
+            var main = particles.main;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(3.0f, 5.0f); // Longer lasting steam
+            main.startSpeed = new ParticleSystem.MinMaxCurve(0.3f, 0.8f); // Slower, more steam-like
+            main.startSize = new ParticleSystem.MinMaxCurve(0.05f, 0.15f); // Small start size
+            main.startColor = new ParticleSystem.MinMaxGradient(new Color(1f, 0.9f, 0.7f, 0.8f), new Color(0.9f, 0.8f, 0.6f, 0.6f)); // Warm steam colors
+            main.maxParticles = 50; // More particles for dense steam
+            main.simulationSpace = ParticleSystemSimulationSpace.World;
+            main.startRotation = new ParticleSystem.MinMaxCurve(0f, 360f); // Random rotation
+            main.gravityModifier = -0.1f; // Slight upward force
+
+            // Emission - continuous steam generation
+            var emission = particles.emission;
+            emission.rateOverTime = 15f; // Dense steam emission
+
+            // Shape - emit from around the limb surface
+            var shape = particles.shape;
+            shape.enabled = true;
+            shape.shapeType = ParticleSystemShapeType.Circle;
+            shape.radius = 0.08f; // Larger emission area
+            shape.radiusThickness = 0.8f; // Emit from edge, not center
+
+            // Velocity over lifetime - steam rises and spreads
+            var velocityOverLifetime = particles.velocityOverLifetime;
+            velocityOverLifetime.enabled = true;
+            velocityOverLifetime.space = ParticleSystemSimulationSpace.World;
+            velocityOverLifetime.y = new ParticleSystem.MinMaxCurve(0.5f, 1.2f); // Rise upward
+            velocityOverLifetime.x = new ParticleSystem.MinMaxCurve(-0.3f, 0.3f); // Slight horizontal drift
             
-            // Start continuous vapor generation
-            if (vaporCoroutine != null)
-            {
-                StopCoroutine(vaporCoroutine);
-            }
-            vaporCoroutine = StartCoroutine(ContinuousVaporEffect());
+            // Size over lifetime - steam expands as it rises
+            var sizeOverLifetime = particles.sizeOverLifetime;
+            sizeOverLifetime.enabled = true;
+            AnimationCurve sizeCurve = new AnimationCurve();
+            sizeCurve.AddKey(0f, 0.3f); // Start small
+            sizeCurve.AddKey(0.5f, 1.0f); // Expand in middle
+            sizeCurve.AddKey(1f, 2.5f); // Large at end
+            sizeOverLifetime.size = new ParticleSystem.MinMaxCurve(1f, sizeCurve);
 
-            ModAPI.Notify($"Started persistent vapor effects on {person.Limbs.Length} limbs");
-        }
-
-        private IEnumerator ContinuousVaporEffect()
-        {
-            while (vaporActive && isMoltenMode)
-            {
-                // Create vapor effect on each limb
-                foreach (var limb in person.Limbs)
-                {
-                    if (limb != null && limb.gameObject != null)
-                    {
-                        // Create vapor at limb position with slight random offset
-                        Vector3 vaporPos = limb.transform.position + new Vector3(
-                            UnityEngine.Random.Range(-0.1f, 0.1f),
-                            UnityEngine.Random.Range(-0.05f, 0.1f),
-                            0f
-                        );
-                        
-                        var vapor = ModAPI.CreateParticleEffect("Vapor", vaporPos);
-                        if (vapor != null)
-                        {
-                            // Store reference for cleanup (though they'll auto-destroy)
-                            vaporParticles.Add(vapor);
-                            
-                            // Remove from list after a delay to prevent memory issues
-                            StartCoroutine(RemoveVaporAfterDelay(vapor, 3f));
-                        }
-                    }
+            // Color over lifetime - fade from warm to transparent
+            var colorOverLifetime = particles.colorOverLifetime;
+            colorOverLifetime.enabled = true;
+            Gradient gradient = new Gradient();
+            gradient.SetKeys(
+                new GradientColorKey[] { 
+                    new GradientColorKey(new Color(1f, 0.9f, 0.7f), 0.0f), // Warm start
+                    new GradientColorKey(new Color(0.8f, 0.8f, 0.8f), 0.6f), // Cool middle
+                    new GradientColorKey(new Color(0.6f, 0.6f, 0.6f), 1.0f)  // Gray end
+                },
+                new GradientAlphaKey[] { 
+                    new GradientAlphaKey(0.8f, 0.0f), // Start visible
+                    new GradientAlphaKey(0.6f, 0.3f), // Peak visibility
+                    new GradientAlphaKey(0.0f, 1.0f)  // Fade out completely
                 }
-                
-                // Wait before creating next batch of vapor
-                yield return new WaitForSeconds(0.3f); // Create new vapor every 0.3 seconds
-            }
-        }
+            );
+            colorOverLifetime.color = gradient;
 
-        private IEnumerator RemoveVaporAfterDelay(GameObject vapor, float delay)
-        {
-            yield return new WaitForSeconds(delay);
-            if (vaporParticles.Contains(vapor))
-            {
-                vaporParticles.Remove(vapor);
-            }
+            // Rotation over lifetime - steam swirls
+            var rotationOverLifetime = particles.rotationOverLifetime;
+            rotationOverLifetime.enabled = true;
+            rotationOverLifetime.z = new ParticleSystem.MinMaxCurve(-30f, 30f); // Slow swirl
+
+            // Noise module - add turbulence for realistic steam movement
+            var noise = particles.noise;
+            noise.enabled = true;
+            noise.strength = 0.3f;
+            noise.frequency = 0.5f;
+            noise.scrollSpeed = 0.5f;
+            noise.damping = true;
+
+            // Texture sheet animation - if we want animated sprites (optional)
+            var textureSheetAnimation = particles.textureSheetAnimation;
+            textureSheetAnimation.enabled = false; // Keep simple for now
         }
 
         private void RemoveVaporParticles()
         {
             vaporActive = false;
             
-            // Stop the continuous vapor coroutine
-            if (vaporCoroutine != null)
+            // Clean up all particle systems
+            foreach (var particleSystem in vaporParticleSystems)
             {
-                StopCoroutine(vaporCoroutine);
-                vaporCoroutine = null;
-            }
-            
-            // Clean up any existing vapor particles
-            foreach (var particles in vaporParticles)
-            {
-                if (particles != null)
+                if (particleSystem != null && particleSystem.gameObject != null)
                 {
-                    UnityEngine.Object.Destroy(particles);
+                    UnityEngine.Object.Destroy(particleSystem.gameObject);
                 }
             }
-            vaporParticles.Clear();
+            vaporParticleSystems.Clear();
         }
 
         void OnDestroy()
