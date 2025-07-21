@@ -287,11 +287,54 @@ namespace Tanker
             main.startLifetime = new ParticleSystem.MinMaxCurve(3.0f, 5.0f); // Longer lasting steam
             main.startSpeed = new ParticleSystem.MinMaxCurve(0.3f, 0.8f); // Slower, more steam-like
             main.startSize = new ParticleSystem.MinMaxCurve(0.05f, 0.15f); // Small start size
-            main.startColor = new ParticleSystem.MinMaxGradient(new Color(1f, 0.9f, 0.7f, 0.8f), new Color(0.9f, 0.8f, 0.6f, 0.6f)); // Warm steam colors
+            main.startColor = new ParticleSystem.MinMaxGradient(new Color(0.7f, 0.7f, 0.7f, 0.8f), new Color(0.8f, 0.8f, 0.8f, 0.6f)); // Warm steam colors
             main.maxParticles = 50; // More particles for dense steam
             main.simulationSpace = ParticleSystemSimulationSpace.World;
             main.startRotation = new ParticleSystem.MinMaxCurve(0f, 360f); // Random rotation
             main.gravityModifier = -0.1f; // Slight upward force
+
+            // Configure renderer for proper material
+            var renderer = particles.GetComponent<ParticleSystemRenderer>();
+            if (renderer != null)
+            {
+                // Try different shader approaches for compatibility
+                Material steamMaterial = null;
+                
+                // Try 1: Standard Sprites shader
+                var spritesShader = Shader.Find("Sprites/Default");
+                if (spritesShader != null)
+                {
+                    steamMaterial = new Material(spritesShader);
+                }
+                // Try 2: Unlit/Transparent shader as fallback
+                else
+                {
+                    var unlitShader = Shader.Find("Unlit/Transparent");
+                    if (unlitShader != null)
+                    {
+                        steamMaterial = new Material(unlitShader);
+                    }
+                    // Try 3: Legacy particles shader
+                    else
+                    {
+                        var particleShader = Shader.Find("Legacy Shaders/Particles/Alpha Blended");
+                        if (particleShader != null)
+                        {
+                            steamMaterial = new Material(particleShader);
+                        }
+                    }
+                }
+                
+                if (steamMaterial != null)
+                {
+                    steamMaterial.color = Color.white;
+                    renderer.material = steamMaterial;
+                    
+                    // Create a simple white circle texture for the particles
+                    Texture2D circleTexture = CreateCircleTexture(64);
+                    steamMaterial.mainTexture = circleTexture;
+                }
+            }
 
             // Emission - continuous steam generation
             var emission = particles.emission;
@@ -308,8 +351,8 @@ namespace Tanker
             var velocityOverLifetime = particles.velocityOverLifetime;
             velocityOverLifetime.enabled = true;
             velocityOverLifetime.space = ParticleSystemSimulationSpace.World;
-            velocityOverLifetime.y = new ParticleSystem.MinMaxCurve(0.5f, 1.2f); // Rise upward
-            velocityOverLifetime.x = new ParticleSystem.MinMaxCurve(-0.3f, 0.3f); // Slight horizontal drift
+            velocityOverLifetime.y = new ParticleSystem.MinMaxCurve(0.5f, 0.9f); // Rise upward
+            velocityOverLifetime.x = new ParticleSystem.MinMaxCurve(-0.2f, 0.2f); // Slight horizontal drift
             
             // Size over lifetime - steam expands as it rises
             var sizeOverLifetime = particles.sizeOverLifetime;
@@ -326,7 +369,7 @@ namespace Tanker
             Gradient gradient = new Gradient();
             gradient.SetKeys(
                 new GradientColorKey[] { 
-                    new GradientColorKey(new Color(1f, 0.9f, 0.7f), 0.0f), // Warm start
+                    new GradientColorKey(new Color(0.8f, 0.8f, 0.8f), 0.0f), // Warm start
                     new GradientColorKey(new Color(0.8f, 0.8f, 0.8f), 0.6f), // Cool middle
                     new GradientColorKey(new Color(0.6f, 0.6f, 0.6f), 1.0f)  // Gray end
                 },
@@ -369,6 +412,41 @@ namespace Tanker
                 }
             }
             vaporParticleSystems.Clear();
+        }
+
+        private Texture2D CreateCircleTexture(int size)
+        {
+            Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            Color[] pixels = new Color[size * size];
+            
+            Vector2 center = new Vector2(size / 2f, size / 2f);
+            float radius = size / 2f - 2f; // Leave small border
+            
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    Vector2 pos = new Vector2(x, y);
+                    float distance = Vector2.Distance(pos, center);
+                    
+                    if (distance <= radius)
+                    {
+                        // Create soft circular gradient
+                        float alpha = 1f - (distance / radius);
+                        alpha = Mathf.Pow(alpha, 0.5f); // Soft falloff
+                        pixels[y * size + x] = new Color(1f, 1f, 1f, alpha);
+                    }
+                    else
+                    {
+                        pixels[y * size + x] = Color.clear;
+                    }
+                }
+            }
+            
+            texture.SetPixels(pixels);
+            texture.Apply();
+            texture.wrapMode = TextureWrapMode.Clamp;
+            return texture;
         }
 
         void OnDestroy()
