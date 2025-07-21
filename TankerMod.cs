@@ -21,6 +21,8 @@ namespace Tanker
 
         // Particle systems for vapor effects
         private List<GameObject> vaporParticles = new List<GameObject>();
+        private bool vaporActive = false;
+        private Coroutine vaporCoroutine;
 
         public static void Main()
         {
@@ -260,21 +262,77 @@ namespace Tanker
             // Remove any existing particles first
             RemoveVaporParticles();
 
-            foreach (var limb in person.Limbs)
+            vaporActive = true;
+            
+            // Start continuous vapor generation
+            if (vaporCoroutine != null)
             {
-                vaporParticles.Add(ModAPI.CreateParticleEffect("Vapor", limb.transform.position));
+                StopCoroutine(vaporCoroutine);
             }
+            vaporCoroutine = StartCoroutine(ContinuousVaporEffect());
 
-            ModAPI.Notify($"Created vapor particles on {vaporParticles.Count} limbs");
+            ModAPI.Notify($"Started persistent vapor effects on {person.Limbs.Length} limbs");
+        }
+
+        private IEnumerator ContinuousVaporEffect()
+        {
+            while (vaporActive && isMoltenMode)
+            {
+                // Create vapor effect on each limb
+                foreach (var limb in person.Limbs)
+                {
+                    if (limb != null && limb.gameObject != null)
+                    {
+                        // Create vapor at limb position with slight random offset
+                        Vector3 vaporPos = limb.transform.position + new Vector3(
+                            UnityEngine.Random.Range(-0.1f, 0.1f),
+                            UnityEngine.Random.Range(-0.05f, 0.1f),
+                            0f
+                        );
+                        
+                        var vapor = ModAPI.CreateParticleEffect("Vapor", vaporPos);
+                        if (vapor != null)
+                        {
+                            // Store reference for cleanup (though they'll auto-destroy)
+                            vaporParticles.Add(vapor);
+                            
+                            // Remove from list after a delay to prevent memory issues
+                            StartCoroutine(RemoveVaporAfterDelay(vapor, 3f));
+                        }
+                    }
+                }
+                
+                // Wait before creating next batch of vapor
+                yield return new WaitForSeconds(0.3f); // Create new vapor every 0.3 seconds
+            }
+        }
+
+        private IEnumerator RemoveVaporAfterDelay(GameObject vapor, float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            if (vaporParticles.Contains(vapor))
+            {
+                vaporParticles.Remove(vapor);
+            }
         }
 
         private void RemoveVaporParticles()
         {
+            vaporActive = false;
+            
+            // Stop the continuous vapor coroutine
+            if (vaporCoroutine != null)
+            {
+                StopCoroutine(vaporCoroutine);
+                vaporCoroutine = null;
+            }
+            
+            // Clean up any existing vapor particles
             foreach (var particles in vaporParticles)
             {
-                if (particles != null && particles.gameObject != null)
+                if (particles != null)
                 {
-                    UnityEngine.Object.Destroy(particles.gameObject);
+                    UnityEngine.Object.Destroy(particles);
                 }
             }
             vaporParticles.Clear();
