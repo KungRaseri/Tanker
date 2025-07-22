@@ -286,12 +286,12 @@ namespace Tanker
             var main = particles.main;
             main.startLifetime = new ParticleSystem.MinMaxCurve(2.0f, 4.0f); // Steam lifespan
             main.startSpeed = new ParticleSystem.MinMaxCurve(0.1f, 0.4f); // Slower, drifting steam
-            main.startSize = new ParticleSystem.MinMaxCurve(0.02f, 0.08f); // Start very small
+            main.startSize = new ParticleSystem.MinMaxCurve(0.04f, 0.09f); // Start very small
             main.startColor = new ParticleSystem.MinMaxGradient(new Color(0.9f, 0.9f, 0.9f, 1f), new Color(0.7f, 0.7f, 0.7f, 1f)); // Light gray steam
-            main.maxParticles = 40; // Fewer particles for wispy effect
+            main.maxParticles = 100; // Fewer particles for wispy effect
             main.simulationSpace = ParticleSystemSimulationSpace.World;
             main.startRotation = new ParticleSystem.MinMaxCurve(0f, 360f); // Random rotation
-            main.gravityModifier = -0.05f; // Very light upward drift
+            main.gravityModifier = -0.075f; // Very light upward drift
 
             // Configure renderer for proper material
             var renderer = particles.GetComponent<ParticleSystemRenderer>();
