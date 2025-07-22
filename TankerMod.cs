@@ -537,6 +537,7 @@ namespace Tanker
                 // Check if it's a person or limb that can take damage
                 var targetPerson = collider.GetComponent<PersonBehaviour>();
                 var targetLimb = collider.GetComponent<LimbBehaviour>();
+                var targetPhysical = collider.GetComponent<PhysicalBehaviour>();
 
                 if (targetPerson != null)
                 {
@@ -544,14 +545,17 @@ namespace Tanker
                     foreach (var limb in targetPerson.Limbs)
                     {
                         ApplyHeatDamageToLimb(limb, tankerPosition);
-                        // check for chance of ignition, ignite the limb if threshold is met
                     }
                 }
                 else if (targetLimb != null)
                 {
                     // Deal damage directly to the limb
                     ApplyHeatDamageToLimb(targetLimb, tankerPosition);
-                        // check for chance of ignition, ignite the limb if threshold is met
+                }
+                else if (targetPhysical != null)
+                {
+                    // Try to ignite other physical objects (like wood, paper, etc.)
+                    ApplyHeatDamageToPhysicalObject(targetPhysical, tankerPosition);
                 }
             }
         }
@@ -569,41 +573,75 @@ namespace Tanker
 
             // Apply the damage
             limb.Damage(actualDamage);
+            IgniteLimb(limb);
+        }
 
-            // Check for ignition chance (closer targets have higher ignition chance)
-            float ignitionChance = heatAuraIgniteChance * damageMultiplier;
-            if (UnityEngine.Random.value < ignitionChance)
-            {
-                IgniteLimb(limb);
-            }
+        private void ApplyHeatDamageToPhysicalObject(PhysicalBehaviour physicalObject, Vector3 heatSource)
+        {
+            if (physicalObject == null) return;
 
-            // Add heat effect - make the limb glow red briefly
-            if (UnityEngine.Random.value < 0.2f) // 20% chance for visual effect
+            float distance = Vector3.Distance(heatSource, physicalObject.transform.position);
+            if (distance > heatAuraRadius) return;
+
+            // Calculate ignition chance based on distance
+            float damageMultiplier = 1f - (distance / heatAuraRadius);
+
+            // Increase temperature of the object (only if it simulates temperature)
+            if (physicalObject.SimulateTemperature)
             {
-                StartCoroutine(ApplyHeatGlow(limb));
+                physicalObject.Temperature += 30f * damageMultiplier;
             }
+            IgnitePhysicalObject(physicalObject);
         }
 
         private void IgniteLimb(LimbBehaviour limb)
         {
             if (limb == null) return;
 
-            // Use ModAPI to ignite the limb
+            // Use the correct API to ignite the limb via PhysicalBehaviour
+            var physicalBehaviour = limb.GetComponent<PhysicalBehaviour>();
+            if (physicalBehaviour != null)
+            {
+                try
+                {
+                    // Use the correct PhysicalBehaviour.Ignite() method
+                    physicalBehaviour.Ignite(false); // Pass false to respect flammability
+
+                    // Create fire particle effect at limb position
+                    ModAPI.CreateParticleEffect("Flash", limb.transform.position);
+                }
+                catch
+                {
+                    // Fallback: create fire visual effects if Ignite() doesn't work
+                    CreateFireEffect(limb);
+                }
+            }
+            else
+            {
+                // Fallback if no PhysicalBehaviour found
+                CreateFireEffect(limb);
+            }
+        }
+
+        private void IgnitePhysicalObject(PhysicalBehaviour physicalObject)
+        {
+            if (physicalObject == null) return;
+
+            // Check if object is already on fire to avoid redundant ignition
+            if (physicalObject.OnFire) return;
+
             try
             {
-                // Try to set the limb on fire using the game's built-in ignition system
-                limb.Ignite();
-                
-                // Create fire particle effect at limb position
-                ModAPI.CreateParticleEffect("Flash", limb.transform.position);
-                
-                // Add visual feedback
-                StartCoroutine(IgnitionFlash(limb));
+                // Use the correct PhysicalBehaviour.Ignite() method
+                physicalObject.Ignite(false); // Pass false to respect flammability
+
+                // Create fire particle effect at object position
+                ModAPI.CreateParticleEffect("Flash", physicalObject.transform.position);
             }
             catch
             {
-                // Fallback: create fire visual effects if Ignite() doesn't work
-                CreateFireEffect(limb);
+                // Fallback: just create visual effects if ignition fails
+                ModAPI.CreateParticleEffect("Flash", physicalObject.transform.position);
             }
         }
 
@@ -611,7 +649,7 @@ namespace Tanker
         {
             // Create fire particle effects
             ModAPI.CreateParticleEffect("Flash", limb.transform.position);
-            
+
             // Add continuous fire visual until limb is destroyed or extinguished
             StartCoroutine(ContinuousFireEffect(limb));
         }
@@ -643,46 +681,6 @@ namespace Tanker
 
                 elapsed += fireInterval;
                 yield return new WaitForSeconds(fireInterval);
-            }
-        }
-
-        private IEnumerator IgnitionFlash(LimbBehaviour limb)
-        {
-            if (limb == null) yield break;
-
-            var spriteRenderer = limb.GetComponent<SpriteRenderer>();
-            if (spriteRenderer == null) yield break;
-
-            Color originalColor = spriteRenderer.color;
-            Color ignitionColor = new Color(1f, 0.5f, 0f, originalColor.a); // Bright orange flash
-
-            // Ignition flash effect
-            spriteRenderer.color = ignitionColor;
-            yield return new WaitForSeconds(0.2f);
-            
-            if (spriteRenderer != null)
-            {
-                spriteRenderer.color = originalColor;
-            }
-        }
-
-        private IEnumerator ApplyHeatGlow(LimbBehaviour limb)
-        {
-            if (limb == null) yield break;
-
-            var spriteRenderer = limb.GetComponent<SpriteRenderer>();
-            if (spriteRenderer == null) yield break;
-
-            Color originalColor = spriteRenderer.color;
-            Color heatColor = new Color(1f, 0.3f, 0.1f, originalColor.a); // Red-orange glow
-
-            // Quick flash effect
-            spriteRenderer.color = heatColor;
-            yield return new WaitForSeconds(0.1f);
-            
-            if (spriteRenderer != null)
-            {
-                spriteRenderer.color = originalColor;
             }
         }
 
