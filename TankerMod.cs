@@ -22,6 +22,13 @@ namespace Tanker
         // Particle systems for vapor effects
         private List<ParticleSystem> vaporParticleSystems = new List<ParticleSystem>();
         private bool vaporActive = false;
+        
+        // Heat aura system
+        private bool heatAuraActive = false;
+        private Coroutine heatAuraCoroutine;
+        private float heatAuraRadius = 2.0f;
+        private float heatDamageAmount = 0.5f;
+        private float heatDamageInterval = 0.2f;
 
         public static void Main()
         {
@@ -139,6 +146,10 @@ namespace Tanker
 
         private void ClearModes()
         {
+            // Stop heat aura and vapor effects first
+            StopHeatAura();
+            RemoveVaporParticles();
+            
             // Clear any existing modes
             if (isMoltenMode)
             {
@@ -190,8 +201,11 @@ namespace Tanker
 
                 // Create vapor particles on each limb
                 CreateVaporParticles();
+                
+                // Activate heat damage aura
+                StartHeatAura();
 
-                ModAPI.Notify("Molten mode activated!");
+                ModAPI.Notify("Molten mode activated! Heat aura engaged.");
             }
         }
 
@@ -206,8 +220,11 @@ namespace Tanker
 
                 // Remove vapor particles
                 RemoveVaporParticles();
+                
+                // Stop heat aura
+                StopHeatAura();
 
-                ModAPI.Notify("Molten mode deactivated! Original textures restored.");
+                ModAPI.Notify("Molten mode deactivated! Heat aura disabled.");
             }
         }
 
@@ -286,7 +303,7 @@ namespace Tanker
             var main = particles.main;
             main.startLifetime = new ParticleSystem.MinMaxCurve(2.0f, 4.0f); // Steam lifespan
             main.startSpeed = new ParticleSystem.MinMaxCurve(0.1f, 0.4f); // Slower, drifting steam
-            main.startSize = new ParticleSystem.MinMaxCurve(0.04f, 0.09f); // Start very small
+            main.startSize = new ParticleSystem.MinMaxCurve(0.25f, 0.6f); // Start very small
             main.startColor = new ParticleSystem.MinMaxGradient(new Color(0.9f, 0.9f, 0.9f, 1f), new Color(0.7f, 0.7f, 0.7f, 1f)); // Light gray steam
             main.maxParticles = 100; // Fewer particles for wispy effect
             main.simulationSpace = ParticleSystemSimulationSpace.World;
@@ -471,10 +488,135 @@ namespace Tanker
             return texture;
         }
 
+        private void StartHeatAura()
+        {
+            if (heatAuraCoroutine != null)
+            {
+                StopCoroutine(heatAuraCoroutine);
+            }
+            
+            heatAuraActive = true;
+            heatAuraCoroutine = StartCoroutine(HeatAuraEffect());
+        }
+
+        private void StopHeatAura()
+        {
+            heatAuraActive = false;
+            
+            if (heatAuraCoroutine != null)
+            {
+                StopCoroutine(heatAuraCoroutine);
+                heatAuraCoroutine = null;
+            }
+        }
+
+        private IEnumerator HeatAuraEffect()
+        {
+            while (heatAuraActive && isMoltenMode)
+            {
+                ApplyHeatDamage();
+                yield return new WaitForSeconds(heatDamageInterval);
+            }
+        }
+
+        private void ApplyHeatDamage()
+        {
+            if (person == null || person.gameObject == null) return;
+
+            Vector3 tankerPosition = person.transform.position;
+
+            // Find all objects within heat aura radius
+            Collider2D[] objectsInRange = Physics2D.OverlapCircleAll(tankerPosition, heatAuraRadius);
+
+            foreach (var collider in objectsInRange)
+            {
+                // Skip the tanker itself
+                if (collider.gameObject == person.gameObject) continue;
+                
+                // Check if it's a person or limb that can take damage
+                var targetPerson = collider.GetComponent<PersonBehaviour>();
+                var targetLimb = collider.GetComponent<LimbBehaviour>();
+                
+                if (targetPerson != null)
+                {
+                    // Deal damage to all limbs of the person
+                    foreach (var limb in targetPerson.Limbs)
+                    {
+                        ApplyHeatDamageToLimb(limb, tankerPosition);
+                    }
+                }
+                else if (targetLimb != null)
+                {
+                    // Deal damage directly to the limb
+                    ApplyHeatDamageToLimb(targetLimb, tankerPosition);
+                }
+                
+                // Also check for other objects that might have health
+                var healthComponent = collider.GetComponent<LivingBehaviour>();
+                if (healthComponent != null)
+                {
+                    // Apply heat damage to living objects
+                    float distance = Vector3.Distance(tankerPosition, collider.transform.position);
+                    float damageMultiplier = 1f - (distance / heatAuraRadius); // Less damage at edge
+                    float actualDamage = heatDamageAmount * damageMultiplier;
+                    
+                    healthComponent.Damage(actualDamage);
+                    
+                    // Create heat damage visual effect
+                    if (UnityEngine.Random.value < 0.3f) // 30% chance for visual effect
+                    {
+                        ModAPI.CreateParticleEffect("Flash", collider.transform.position);
+                    }
+                }
+            }
+        }
+
+        private void ApplyHeatDamageToLimb(LimbBehaviour limb, Vector3 heatSource)
+        {
+            if (limb == null) return;
+
+            float distance = Vector3.Distance(heatSource, limb.transform.position);
+            if (distance > heatAuraRadius) return;
+
+            // Calculate damage based on distance (closer = more damage)
+            float damageMultiplier = 1f - (distance / heatAuraRadius);
+            float actualDamage = heatDamageAmount * damageMultiplier;
+
+            // Apply the damage
+            limb.Damage(actualDamage);
+
+            // Add heat effect - make the limb glow red briefly
+            if (UnityEngine.Random.value < 0.2f) // 20% chance for visual effect
+            {
+                StartCoroutine(ApplyHeatGlow(limb));
+            }
+        }
+
+        private IEnumerator ApplyHeatGlow(LimbBehaviour limb)
+        {
+            if (limb == null) yield break;
+
+            var spriteRenderer = limb.GetComponent<SpriteRenderer>();
+            if (spriteRenderer == null) yield break;
+
+            Color originalColor = spriteRenderer.color;
+            Color heatColor = new Color(1f, 0.3f, 0.1f, originalColor.a); // Red-orange glow
+
+            // Quick flash effect
+            spriteRenderer.color = heatColor;
+            yield return new WaitForSeconds(0.1f);
+            
+            if (spriteRenderer != null)
+            {
+                spriteRenderer.color = originalColor;
+            }
+        }
+
         void OnDestroy()
         {
-            // Clean up particles when the component is destroyed
+            // Clean up particles and heat aura when the component is destroyed
             RemoveVaporParticles();
+            StopHeatAura();
         }
     }
 }
