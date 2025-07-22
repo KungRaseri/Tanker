@@ -569,6 +569,121 @@ namespace Tanker
 
             // Apply the damage
             limb.Damage(actualDamage);
+
+            // Check for ignition chance (closer targets have higher ignition chance)
+            float ignitionChance = heatAuraIgniteChance * damageMultiplier;
+            if (UnityEngine.Random.value < ignitionChance)
+            {
+                IgniteLimb(limb);
+            }
+
+            // Add heat effect - make the limb glow red briefly
+            if (UnityEngine.Random.value < 0.2f) // 20% chance for visual effect
+            {
+                StartCoroutine(ApplyHeatGlow(limb));
+            }
+        }
+
+        private void IgniteLimb(LimbBehaviour limb)
+        {
+            if (limb == null) return;
+
+            // Use ModAPI to ignite the limb
+            try
+            {
+                // Try to set the limb on fire using the game's built-in ignition system
+                limb.Ignite();
+                
+                // Create fire particle effect at limb position
+                ModAPI.CreateParticleEffect("Flash", limb.transform.position);
+                
+                // Add visual feedback
+                StartCoroutine(IgnitionFlash(limb));
+            }
+            catch
+            {
+                // Fallback: create fire visual effects if Ignite() doesn't work
+                CreateFireEffect(limb);
+            }
+        }
+
+        private void CreateFireEffect(LimbBehaviour limb)
+        {
+            // Create fire particle effects
+            ModAPI.CreateParticleEffect("Flash", limb.transform.position);
+            
+            // Add continuous fire visual until limb is destroyed or extinguished
+            StartCoroutine(ContinuousFireEffect(limb));
+        }
+
+        private IEnumerator ContinuousFireEffect(LimbBehaviour limb)
+        {
+            float fireDuration = 5.0f; // Fire lasts 5 seconds
+            float fireInterval = 0.3f;
+            float elapsed = 0f;
+
+            while (elapsed < fireDuration && limb != null && limb.gameObject != null)
+            {
+                // Create fire particles
+                if (UnityEngine.Random.value < 0.7f)
+                {
+                    Vector3 firePos = limb.transform.position + new Vector3(
+                        UnityEngine.Random.Range(-0.1f, 0.1f),
+                        UnityEngine.Random.Range(-0.1f, 0.1f),
+                        0f
+                    );
+                    ModAPI.CreateParticleEffect("Flash", firePos);
+                }
+
+                // Deal fire damage over time
+                if (limb != null)
+                {
+                    limb.Damage(0.2f);
+                }
+
+                elapsed += fireInterval;
+                yield return new WaitForSeconds(fireInterval);
+            }
+        }
+
+        private IEnumerator IgnitionFlash(LimbBehaviour limb)
+        {
+            if (limb == null) yield break;
+
+            var spriteRenderer = limb.GetComponent<SpriteRenderer>();
+            if (spriteRenderer == null) yield break;
+
+            Color originalColor = spriteRenderer.color;
+            Color ignitionColor = new Color(1f, 0.5f, 0f, originalColor.a); // Bright orange flash
+
+            // Ignition flash effect
+            spriteRenderer.color = ignitionColor;
+            yield return new WaitForSeconds(0.2f);
+            
+            if (spriteRenderer != null)
+            {
+                spriteRenderer.color = originalColor;
+            }
+        }
+
+        private IEnumerator ApplyHeatGlow(LimbBehaviour limb)
+        {
+            if (limb == null) yield break;
+
+            var spriteRenderer = limb.GetComponent<SpriteRenderer>();
+            if (spriteRenderer == null) yield break;
+
+            Color originalColor = spriteRenderer.color;
+            Color heatColor = new Color(1f, 0.3f, 0.1f, originalColor.a); // Red-orange glow
+
+            // Quick flash effect
+            spriteRenderer.color = heatColor;
+            yield return new WaitForSeconds(0.1f);
+            
+            if (spriteRenderer != null)
+            {
+                spriteRenderer.color = originalColor;
+            }
         }
 
         void OnDestroy()
