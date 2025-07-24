@@ -113,6 +113,16 @@ namespace Tanker
 
                 limb.ImpactDamageMultiplier = 0.5f; // Reduce impact damage taken by limbs
                 limb.ShotDamageMultiplier = 0.5f; // Reduce shot damage taken by limbs
+
+                // Make Tanker immune to heat/fire effects
+                var physicalBehaviour = limb.GetComponent<PhysicalBehaviour>();
+                if (physicalBehaviour != null)
+                {
+                    // Set high heat resistance
+                    physicalBehaviour.Temperature = 20f; // Set to ambient temperature
+                    
+                    // We'll also prevent heating in the ApplyHeatDamage method through our immunity checks
+                }
             }
         }
 
@@ -206,7 +216,7 @@ namespace Tanker
                 // Activate heat damage aura
                 StartHeatAura();
 
-                ModAPI.Notify("Molten mode activated! Heat aura engaged.");
+                ModAPI.Notify("Molten mode activated! Heat aura engaged. Tanker is immune to heat damage.");
             }
         }
 
@@ -516,7 +526,36 @@ namespace Tanker
             while (heatAuraActive && isMoltenMode)
             {
                 ApplyHeatDamage();
+                
+                // Keep the Tanker's own temperature regulated to prevent self-damage
+                MaintainTankerTemperature();
+                
                 yield return new WaitForSeconds(heatDamageInterval);
+            }
+        }
+
+        private void MaintainTankerTemperature()
+        {
+            if (person == null || person.Limbs == null) return;
+
+            // Keep Tanker's limbs at a safe temperature to prevent self-damage
+            foreach (var limb in person.Limbs)
+            {
+                var physicalBehaviour = limb.GetComponent<PhysicalBehaviour>();
+                if (physicalBehaviour != null)
+                {
+                    // Keep temperature at a reasonable level that won't cause auto-ignition
+                    if (physicalBehaviour.Temperature > 200f)
+                    {
+                        physicalBehaviour.Temperature = 200f; // Cap at 200°C
+                    }
+                    
+                    // Extinguish any fire that might have been applied to the Tanker
+                    if (physicalBehaviour.OnFire)
+                    {
+                        physicalBehaviour.Extinguish();
+                    }
+                }
             }
         }
 
@@ -531,8 +570,9 @@ namespace Tanker
 
             foreach (var collider in objectsInRange)
             {
-                // Skip the tanker itself
+                // Skip the tanker itself and all its limbs
                 if (collider.gameObject == person.gameObject) continue;
+                if (IsTankerLimb(collider.gameObject)) continue;
 
                 // Check if it's a person or limb that can take damage
                 var targetPerson = collider.GetComponent<PersonBehaviour>();
@@ -541,6 +581,9 @@ namespace Tanker
 
                 if (targetPerson != null)
                 {
+                    // Skip if this is the same person as the tanker
+                    if (targetPerson == person) continue;
+
                     // Deal damage to all limbs of the person
                     foreach (var limb in targetPerson.Limbs)
                     {
@@ -549,11 +592,17 @@ namespace Tanker
                 }
                 else if (targetLimb != null)
                 {
+                    // Skip if this limb belongs to the tanker
+                    if (targetLimb.Person == person) continue;
+
                     // Deal damage directly to the limb
                     ApplyHeatDamageToLimb(targetLimb, tankerPosition);
                 }
                 else if (targetPhysical != null)
                 {
+                    // Skip if this physical object is part of the tanker
+                    if (IsPartOfTanker(targetPhysical.gameObject)) continue;
+
                     // Try to ignite other physical objects (like wood, paper, etc.)
                     ApplyHeatDamageToPhysicalObject(targetPhysical, tankerPosition);
                 }
@@ -585,13 +634,56 @@ namespace Tanker
 
             // Calculate ignition chance based on distance
             float damageMultiplier = 1f - (distance / heatAuraRadius);
+            float ignitionChance = heatAuraIgniteChance * damageMultiplier * 0.3f; // Lower chance for non-living objects
 
             // Increase temperature of the object (only if it simulates temperature)
             if (physicalObject.SimulateTemperature)
             {
                 physicalObject.Temperature += 30f * damageMultiplier;
             }
-            IgnitePhysicalObject(physicalObject);
+
+            // Check for ignition chance (only if not already on fire)
+            if (!physicalObject.OnFire && UnityEngine.Random.value < ignitionChance)
+            {
+                IgnitePhysicalObject(physicalObject);
+            }
+        }
+
+        private bool IsTankerLimb(GameObject obj)
+        {
+            if (person == null || person.Limbs == null) return false;
+
+            // Check if the object is one of the tanker's limbs
+            foreach (var limb in person.Limbs)
+            {
+                if (limb != null && limb.gameObject == obj)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private bool IsPartOfTanker(GameObject obj)
+        {
+            if (person == null) return false;
+
+            // Check if the object is the tanker's main GameObject
+            if (obj == person.gameObject) return true;
+
+            // Check if the object is a child of the tanker
+            Transform current = obj.transform;
+            while (current != null)
+            {
+                if (current.gameObject == person.gameObject)
+                {
+                    return true;
+                }
+                current = current.parent;
+            }
+
+            // Check if the object is one of the tanker's limbs
+            return IsTankerLimb(obj);
         }
 
         private void IgniteLimb(LimbBehaviour limb)
@@ -608,7 +700,7 @@ namespace Tanker
                     physicalBehaviour.Ignite(false); // Pass false to respect flammability
 
                     // Create fire particle effect at limb position
-                    ModAPI.CreateParticleEffect("Flash", limb.transform.position);
+                    // ModAPI.CreateParticleEffect("Flash", limb.transform.position);
                 }
                 catch
                 {
@@ -636,19 +728,19 @@ namespace Tanker
                 physicalObject.Ignite(false); // Pass false to respect flammability
 
                 // Create fire particle effect at object position
-                ModAPI.CreateParticleEffect("Flash", physicalObject.transform.position);
+                // ModAPI.CreateParticleEffect("Flash", physicalObject.transform.position);
             }
             catch
             {
                 // Fallback: just create visual effects if ignition fails
-                ModAPI.CreateParticleEffect("Flash", physicalObject.transform.position);
+                // ModAPI.CreateParticleEffect("Flash", physicalObject.transform.position);
             }
         }
 
         private void CreateFireEffect(LimbBehaviour limb)
         {
             // Create fire particle effects
-            ModAPI.CreateParticleEffect("Flash", limb.transform.position);
+            // ModAPI.CreateParticleEffect("Flash", limb.transform.position);
 
             // Add continuous fire visual until limb is destroyed or extinguished
             StartCoroutine(ContinuousFireEffect(limb));
