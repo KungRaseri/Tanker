@@ -120,7 +120,7 @@ namespace Tanker
                 {
                     // Set high heat resistance
                     physicalBehaviour.Temperature = 20f; // Set to ambient temperature
-                    
+
                     // We'll also prevent heating in the ApplyHeatDamage method through our immunity checks
                 }
             }
@@ -208,6 +208,31 @@ namespace Tanker
 
             if (moltenTexture != null)
             {
+                // Create explosion when entering molten mode
+                ExplosionCreator.Explode(new ExplosionCreator.ExplosionParameters
+                {
+                    //Explosion center
+                    Position = person.transform.position,
+
+                    //Should particles be created and sound played? 
+                    CreateParticlesAndSound = true,
+
+                    //Should the particles, if created, be that of a large explosion?
+                    LargeExplosionParticles = true,
+
+                    //The chance that limbs are torn off (0 - 1, 1 meaning all limbs and 0 meaning none)
+                    DismemberChance = 0.50f,
+
+                    //The amount of force for each "fragment" of the explosion. 8 is a pretty powerful explosion. 2 is a regular explosion.
+                    FragmentForce = 8,
+
+                    //The amount of rays cast to simulate fragments. More rays is more lag but higher precision
+                    FragmentationRayCount = 16,
+
+                    //The ultimate range of the explosion
+                    Range = 3
+                });
+
                 person.SetBodyTextures(moltenTexture, moltenTexture, moltenTexture, 1f);
 
                 // Create vapor particles on each limb
@@ -526,10 +551,10 @@ namespace Tanker
             while (heatAuraActive && isMoltenMode)
             {
                 ApplyHeatDamage();
-                
+
                 // Keep the Tanker's own temperature regulated to prevent self-damage
                 MaintainTankerTemperature();
-                
+
                 yield return new WaitForSeconds(heatDamageInterval);
             }
         }
@@ -549,7 +574,7 @@ namespace Tanker
                     {
                         physicalBehaviour.Temperature = 200f; // Cap at 200°C
                     }
-                    
+
                     // Extinguish any fire that might have been applied to the Tanker
                     if (physicalBehaviour.OnFire)
                     {
@@ -700,7 +725,7 @@ namespace Tanker
                     physicalBehaviour.Ignite(false); // Pass false to respect flammability
 
                     // Create fire particle effect at limb position
-                    // ModAPI.CreateParticleEffect("Flash", limb.transform.position);
+                    ModAPI.CreateParticleEffect("Flash", limb.transform.position);
                 }
                 catch
                 {
@@ -728,19 +753,19 @@ namespace Tanker
                 physicalObject.Ignite(false); // Pass false to respect flammability
 
                 // Create fire particle effect at object position
-                // ModAPI.CreateParticleEffect("Flash", physicalObject.transform.position);
+                ModAPI.CreateParticleEffect("Flash", physicalObject.transform.position);
             }
             catch
             {
                 // Fallback: just create visual effects if ignition fails
-                // ModAPI.CreateParticleEffect("Flash", physicalObject.transform.position);
+                ModAPI.CreateParticleEffect("Flash", physicalObject.transform.position);
             }
         }
 
         private void CreateFireEffect(LimbBehaviour limb)
         {
             // Create fire particle effects
-            // ModAPI.CreateParticleEffect("Flash", limb.transform.position);
+            ModAPI.CreateParticleEffect("Flash", limb.transform.position);
 
             // Add continuous fire visual until limb is destroyed or extinguished
             StartCoroutine(ContinuousFireEffect(limb));
