@@ -8,7 +8,8 @@
   "EntryPoint": "Tanker.TankerMod",
   "Tags": [],
   "Scripts": [
-    "TankerMod.cs"
+    "TankerMod.cs",
+    "MoltenModeController.cs"
   ],
   "Active": true,
   "UGCIdentity": null,

@@ -3,17 +3,17 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace Tanker.MoltenMode
+namespace Tanker
 {
     public class MoltenModeController : MonoBehaviour
     {
         // Reference to the parent tanker
         private PersonBehaviour person;
         private TankerMod tankerMod;
-        
+
         // Molten mode state
         public bool IsActive { get; private set; } = false;
-        
+
         // Textures
         private Texture2D moltenTexture;
         private Texture2D originalSkin;
@@ -33,8 +33,8 @@ namespace Tanker.MoltenMode
         private float heatAuraIgniteChance = 0.5f;
         private int heatAuraCycles = 0;
 
-        public void Initialize(PersonBehaviour person, TankerMod tankerMod, 
-                              Texture2D moltenTexture, Texture2D originalSkin, 
+        public void Initialize(PersonBehaviour person, TankerMod tankerMod,
+                              Texture2D moltenTexture, Texture2D originalSkin,
                               Texture2D originalFlesh, Texture2D originalBone)
         {
             this.person = person;
