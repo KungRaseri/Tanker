@@ -26,10 +26,13 @@ namespace Tanker
         // Heat aura system
         private bool heatAuraActive = false;
         private Coroutine heatAuraCoroutine;
-        private float heatAuraRadius = 2.0f;
+        private float heatAuraRadius = 3.0f; // Increased radius for better coverage
         private float heatDamageAmount = 0.5f;
         private float heatDamageInterval = 0.2f;
         private float heatAuraIgniteChance = 0.5f;
+
+        // Debug tracking
+        private int heatAuraCycles = 0;
 
         public static void Main()
         {
@@ -212,19 +215,19 @@ namespace Tanker
                 ExplosionCreator.Explode(new ExplosionCreator.ExplosionParameters
                 {
                     //Explosion center
-                    Position = person.transform.position,
+                    Position = GetTankerCenterPosition(),
 
                     //Should particles be created and sound played? 
                     CreateParticlesAndSound = true,
 
                     //Should the particles, if created, be that of a large explosion?
-                    LargeExplosionParticles = true,
+                    LargeExplosionParticles = false,
 
                     //The chance that limbs are torn off (0 - 1, 1 meaning all limbs and 0 meaning none)
                     DismemberChance = 0.50f,
 
                     //The amount of force for each "fragment" of the explosion. 8 is a pretty powerful explosion. 2 is a regular explosion.
-                    FragmentForce = 8,
+                    FragmentForce = 4,
 
                     //The amount of rays cast to simulate fragments. More rays is more lag but higher precision
                     FragmentationRayCount = 16,
@@ -548,15 +551,27 @@ namespace Tanker
 
         private IEnumerator HeatAuraEffect()
         {
+            heatAuraCycles = 0;
+            ModAPI.Notify("Heat aura started - continuous damage mode active!");
+
             while (heatAuraActive && isMoltenMode)
             {
+                heatAuraCycles++;
                 ApplyHeatDamage();
 
                 // Keep the Tanker's own temperature regulated to prevent self-damage
                 MaintainTankerTemperature();
 
+                // Provide periodic feedback that the aura is working (less frequent)
+                if (heatAuraCycles % 50 == 0) // Every 10 seconds (50 * 0.2s)
+                {
+                    ModAPI.Notify($"Heat aura active: {heatAuraCycles} cycles completed");
+                }
+
                 yield return new WaitForSeconds(heatDamageInterval);
             }
+
+            ModAPI.Notify("Heat aura stopped.");
         }
 
         private void MaintainTankerTemperature()
@@ -588,40 +603,56 @@ namespace Tanker
         {
             if (person == null || person.gameObject == null) return;
 
-            Vector3 tankerPosition = person.transform.position;
+            // Calculate Tanker's current center position based on limbs for accurate following
+            Vector3 tankerPosition = GetTankerCenterPosition();
+            int targetsAffected = 0;
 
-            // Find all objects within heat aura radius
+            // Find all objects within heat aura radius using multiple detection methods for reliability
             Collider2D[] objectsInRange = Physics2D.OverlapCircleAll(tankerPosition, heatAuraRadius);
 
+            // Also find all PersonBehaviour objects in the scene and check distance manually
+            // This ensures we don't miss any newly spawned persons due to physics timing issues
+            PersonBehaviour[] allPersons = FindObjectsOfType<PersonBehaviour>();
+
+            // Process persons found by manual search
+            foreach (var targetPerson in allPersons)
+            {
+                if (targetPerson == null || targetPerson == person) continue;
+
+                float distanceToTarget = Vector3.Distance(tankerPosition, targetPerson.transform.position);
+                if (distanceToTarget <= heatAuraRadius)
+                {
+                    // Deal damage to all limbs of the person
+                    foreach (var limb in targetPerson.Limbs)
+                    {
+                        if (limb != null)
+                        {
+                            ApplyHeatDamageToLimb(limb, tankerPosition);
+                            targetsAffected++;
+                        }
+                    }
+                }
+            }
+
+            // Process colliders found by physics overlap (for non-person objects and backup)
             foreach (var collider in objectsInRange)
             {
                 // Skip the tanker itself and all its limbs
                 if (collider.gameObject == person.gameObject) continue;
                 if (IsTankerLimb(collider.gameObject)) continue;
 
-                // Check if it's a person or limb that can take damage
-                var targetPerson = collider.GetComponent<PersonBehaviour>();
+                // Check if it's a limb that can take damage
                 var targetLimb = collider.GetComponent<LimbBehaviour>();
                 var targetPhysical = collider.GetComponent<PhysicalBehaviour>();
 
-                if (targetPerson != null)
-                {
-                    // Skip if this is the same person as the tanker
-                    if (targetPerson == person) continue;
-
-                    // Deal damage to all limbs of the person
-                    foreach (var limb in targetPerson.Limbs)
-                    {
-                        ApplyHeatDamageToLimb(limb, tankerPosition);
-                    }
-                }
-                else if (targetLimb != null)
+                if (targetLimb != null)
                 {
                     // Skip if this limb belongs to the tanker
                     if (targetLimb.Person == person) continue;
 
-                    // Deal damage directly to the limb
+                    // Deal damage directly to the limb (backup for manual person search)
                     ApplyHeatDamageToLimb(targetLimb, tankerPosition);
+                    targetsAffected++;
                 }
                 else if (targetPhysical != null)
                 {
@@ -630,7 +661,14 @@ namespace Tanker
 
                     // Try to ignite other physical objects (like wood, paper, etc.)
                     ApplyHeatDamageToPhysicalObject(targetPhysical, tankerPosition);
+                    targetsAffected++;
                 }
+            }
+
+            // Debug feedback every few cycles when targets are found (less frequent)
+            if (targetsAffected > 0 && heatAuraCycles % 25 == 0)
+            {
+                ModAPI.Notify($"Heat aura affecting {targetsAffected} targets");
             }
         }
 
@@ -647,7 +685,13 @@ namespace Tanker
 
             // Apply the damage
             limb.Damage(actualDamage);
-            IgniteLimb(limb);
+
+            // Check for ignition chance (closer targets have higher ignition chance)
+            float ignitionChance = heatAuraIgniteChance * damageMultiplier;
+            if (UnityEngine.Random.value < ignitionChance)
+            {
+                IgniteLimb(limb);
+            }
         }
 
         private void ApplyHeatDamageToPhysicalObject(PhysicalBehaviour physicalObject, Vector3 heatSource)
@@ -798,6 +842,39 @@ namespace Tanker
 
                 elapsed += fireInterval;
                 yield return new WaitForSeconds(fireInterval);
+            }
+        }
+
+        private Vector3 GetTankerCenterPosition()
+        {
+            if (person == null || person.Limbs == null || person.Limbs.Length == 0)
+            {
+                // Fallback to person's GameObject position if limbs are not available
+                return person != null ? person.transform.position : Vector3.zero;
+            }
+
+            // Calculate the average position of all limbs to get the center
+            Vector3 centerPosition = Vector3.zero;
+            int validLimbCount = 0;
+
+            foreach (var limb in person.Limbs)
+            {
+                if (limb != null && limb.gameObject != null)
+                {
+                    centerPosition += limb.transform.position;
+                    validLimbCount++;
+                }
+            }
+
+            if (validLimbCount > 0)
+            {
+                centerPosition /= validLimbCount;
+                return centerPosition;
+            }
+            else
+            {
+                // Fallback if no valid limbs found
+                return person.transform.position;
             }
         }
 
