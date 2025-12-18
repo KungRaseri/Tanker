@@ -12,15 +12,15 @@ namespace Tanker
 
         // Instance variables for tracking state per Tanker
         public PersonBehaviour person;
-        public bool isUltraSenseMode = false;
         public Texture2D originalSkin;
         public Texture2D originalFlesh;
         public Texture2D originalBone;
         public Texture2D moltenTexture;
         public Texture2D ultraSenseTexture;
 
-        // Molten mode controller
+        // Mode controllers
         private MoltenModeController moltenModeController;
+        private UltraSenseModeController ultraSenseModeController;
 
         public static void Main()
         {
@@ -70,6 +70,9 @@ namespace Tanker
 
             // Initialize molten mode controller
             InitializeMoltenModeController();
+
+            // Initialize ultra sense mode controller
+            InitializeUltraSenseModeController();
         }
 
         private void LoadTextures()
@@ -127,6 +130,13 @@ namespace Tanker
             moltenModeController.Initialize(person, this, moltenTexture, originalSkin, originalFlesh, originalBone);
         }
 
+        private void InitializeUltraSenseModeController()
+        {
+            // Add the UltraSenseModeController component to this GameObject
+            ultraSenseModeController = gameObject.AddComponent<UltraSenseModeController>();
+            ultraSenseModeController.Initialize(person, this, ultraSenseTexture, originalSkin, originalFlesh, originalBone);
+        }
+
         public void SetupTankerContextMenu()
         {
             // Try adding context menu to each limb since that's where right-clicks are detected
@@ -164,9 +174,10 @@ namespace Tanker
                 moltenModeController.DisableMoltenMode();
             }
 
-            if (isUltraSenseMode)
+            // Clear ultra sense mode using the controller
+            if (ultraSenseModeController != null && ultraSenseModeController.IsActive)
             {
-                DisableUltraSenseMode();
+                ultraSenseModeController.DisableUltraSenseMode();
             }
         }
 
@@ -180,42 +191,9 @@ namespace Tanker
 
         private void ToggleUltraSenseMode()
         {
-            if (isUltraSenseMode)
+            if (ultraSenseModeController != null)
             {
-                DisableUltraSenseMode();
-            }
-            else
-            {
-                // Enable ultra sense mode
-                EnableUltraSenseMode();
-            }
-        }
-
-        private void EnableUltraSenseMode()
-        {
-            ClearModes();
-
-            isUltraSenseMode = true;
-
-            if (ultraSenseTexture != null)
-            {
-                // Method 1: Use SetBodyTextures with ultra sense texture
-                person.SetBodyTextures(ultraSenseTexture, ultraSenseTexture, ultraSenseTexture, 1f);
-
-                ModAPI.Notify("Ultra sense mode activated! Textures applied.");
-            }
-        }
-
-        private void DisableUltraSenseMode()
-        {
-            isUltraSenseMode = false;
-
-            if (originalSkin != null && originalFlesh != null && originalBone != null)
-            {
-                // Restore original textures
-                person.SetBodyTextures(originalSkin, originalFlesh, originalBone, 1f);
-
-                ModAPI.Notify("Ultra sense mode deactivated! Original textures restored.");
+                ultraSenseModeController.ToggleUltraSenseMode();
             }
         }
 
@@ -229,21 +207,27 @@ namespace Tanker
             avgHealth /= person.Limbs.Length;
 
             bool moltenModeActive = moltenModeController != null && moltenModeController.IsActive;
+            bool ultraSenseModeActive = ultraSenseModeController != null && ultraSenseModeController.IsActive;
 
             string status = $"Tanker Status Report:\n" +
                           $"Health: {(avgHealth * 100):F0}%\n" +
                           $"Molten Mode: {(moltenModeActive ? "ACTIVE" : "INACTIVE")}\n" +
-                          $"Ultra Sense Mode: {(isUltraSenseMode ? "ACTIVE" : "INACTIVE")}\n";
+                          $"Ultra Sense Mode: {(ultraSenseModeActive ? "ACTIVE" : "INACTIVE")}\n";
 
             ModAPI.Notify(status);
         }
 
         void OnDestroy()
         {
-            // Clean up molten mode controller when the component is destroyed
+            // Clean up mode controllers when the component is destroyed
             if (moltenModeController != null)
             {
                 moltenModeController.DisableMoltenMode();
+            }
+
+            if (ultraSenseModeController != null)
+            {
+                ultraSenseModeController.DisableUltraSenseMode();
             }
         }
     }

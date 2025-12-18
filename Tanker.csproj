@@ -39,6 +39,7 @@
   <ItemGroup>
     <Compile Include="TankerMod.cs" />
     <Compile Include="MoltenModeController.cs" />
+    <Compile Include="UltraSenseModeController.cs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Assembly-CSharp">

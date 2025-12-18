@@ -9,7 +9,8 @@
   "Tags": [],
   "Scripts": [
     "TankerMod.cs",
-    "MoltenModeController.cs"
+    "MoltenModeController.cs",
+    "UltraSenseModeController.cs"
   ],
   "Active": true,
   "UGCIdentity": null,
