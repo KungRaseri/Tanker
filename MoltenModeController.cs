@@ -180,12 +180,14 @@ namespace Tanker
             // Create a physical fireball object
             GameObject fireballObj = new GameObject("Fireball");
             fireballObj.transform.position = position;
+            // Don't set layer - let it use whatever default Unity/PPG uses
 
             // Add visual components
             SpriteRenderer spriteRenderer = fireballObj.AddComponent<SpriteRenderer>();
             spriteRenderer.sprite = CreateFireballSprite();
             spriteRenderer.color = new Color(1f, 0.3f, 0f, 1f); // Bright orange/red fire color
             fireballObj.transform.localScale = Vector3.one * 0.3f;
+            spriteRenderer.sortingOrder = 100; // Render on top
 
             // Add glow effect with another sprite renderer
             GameObject glowObj = new GameObject("FireballGlow");
@@ -196,33 +198,34 @@ namespace Tanker
             SpriteRenderer glowRenderer = glowObj.AddComponent<SpriteRenderer>();
             glowRenderer.sprite = CreateFireballSprite();
             glowRenderer.color = new Color(1f, 0.6f, 0.1f, 0.5f); // Outer orange glow
-            glowRenderer.sortingOrder = -1; // Render behind main fireball
+            glowRenderer.sortingOrder = 99; // Render behind main fireball
 
-            // Add physics
+            // Add rigidbody for physics
             Rigidbody2D rb = fireballObj.AddComponent<Rigidbody2D>();
-            rb.gravityScale = 0.2f; // Slight gravity
-            rb.velocity = direction * 10f; // Launch speed
-            rb.mass = 0.5f;
-            rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous; // Better collision detection
             rb.bodyType = RigidbodyType2D.Dynamic;
-
-            // Add collider
+            rb.gravityScale = 0.3f; // Slight gravity
+            rb.mass = 0.5f; // Reasonable mass
+            rb.drag = 0f;
+            rb.angularDrag = 0f;
+            rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+            rb.interpolation = RigidbodyInterpolation2D.Interpolate;
+            
+            // Add TRIGGER collider - triggers are more reliable in Unity
             CircleCollider2D collider = fireballObj.AddComponent<CircleCollider2D>();
-            collider.radius = 0.15f; // Adjusted to match visual size better
-            collider.isTrigger = false; // Must be false for OnCollisionEnter2D to work
+            collider.radius = 0.5f; // Much larger radius for better detection
+            collider.isTrigger = true; // Use trigger mode
+            
+            // Set velocity after rigidbody is configured
+            rb.velocity = direction * 15f; // Increased launch speed
 
-            // Add physical behavior for temperature/fire
-            PhysicalBehaviour physicalBehaviour = fireballObj.AddComponent<PhysicalBehaviour>();
-            physicalBehaviour.InitialMass = 0.5f;
-            physicalBehaviour.Temperature = 1000f; // Very hot
-            physicalBehaviour.Charge = 0f;
-
-            // Add fireball behavior component
+            // Add fireball behavior component LAST
             FireballBehavior fireballBehavior = fireballObj.AddComponent<FireballBehavior>();
-            fireballBehavior.Initialize(3f); // 3 second lifetime
+            fireballBehavior.Initialize(5f, person); // Pass the tanker person to exclude from collision
 
             // Create fire particle trail
             CreateFireballParticles(fireballObj);
+            
+            ModAPI.Notify($"Fireball created! Layer: {fireballObj.layer}");
         }
 
         private Sprite CreateFireballSprite()
@@ -873,39 +876,95 @@ namespace Tanker
         private bool hasExploded = false;
         private float explosionRadius = 2f;
         private float explosionDamage = 5f;
+        private int collisionCount = 0;
+        private PersonBehaviour excludedPerson; // The tanker who launched this fireball
 
-        public void Initialize(float lifetime)
+        public void Initialize(float lifetime, PersonBehaviour excludedPerson)
         {
             this.lifetime = lifetime;
+            this.excludedPerson = excludedPerson;
+            ModAPI.Notify("FireballBehavior initialized!");
+        }
+
+        void Start()
+        {
+            // Verify components on start
+            var rb = GetComponent<Rigidbody2D>();
+            var col = GetComponent<CircleCollider2D>();
+            ModAPI.Notify($"Fireball Start - RB: {rb != null}, Collider: {col != null}, Velocity: {(rb != null ? rb.velocity.magnitude : 0)}");
         }
 
         void Update()
         {
             elapsedTime += Time.deltaTime;
 
+            // Manual collision detection using overlap check
+            Collider2D[] hits = Physics2D.OverlapCircleAll(transform.position, 0.5f);
+            foreach (var hit in hits)
+            {
+                // Skip self
+                if (hit.gameObject == gameObject) continue;
+
+                // Check if this is a limb from the excluded person (the Tanker)
+                LimbBehaviour limb = hit.GetComponent<LimbBehaviour>();
+                if (limb != null && excludedPerson != null)
+                {
+                    // Check if this limb belongs to the Tanker
+                    bool isTankerLimb = false;
+                    foreach (var tankerLimb in excludedPerson.Limbs)
+                    {
+                        if (tankerLimb == limb)
+                        {
+                            isTankerLimb = true;
+                            break;
+                        }
+                    }
+                    
+                    // Skip if it's the Tanker's limb
+                    if (isTankerLimb) continue;
+                }
+
+                // Check if we hit something valid (limb, person, or physical object)
+                if (hit.GetComponent<LimbBehaviour>() != null || 
+                    hit.GetComponent<PersonBehaviour>() != null ||
+                    hit.GetComponent<PhysicalBehaviour>() != null)
+                {
+                    ModAPI.Notify($"MANUAL COLLISION DETECTED with: {hit.gameObject.name}");
+                    if (!hasExploded)
+                    {
+                        Explode();
+                        return;
+                    }
+                }
+            }
+
             // Destroy after lifetime expires
             if (elapsedTime >= lifetime && !hasExploded)
             {
+                ModAPI.Notify("Fireball lifetime expired!");
                 Explode();
             }
         }
 
         void OnCollisionEnter2D(Collision2D collision)
         {
+            collisionCount++;
+            ModAPI.Notify($"COLLISION #{collisionCount} with: {collision.gameObject.name} (Layer: {collision.gameObject.layer})");
+            
             // Explode on impact
             if (!hasExploded)
             {
-                ModAPI.Notify("Fireball collision detected!");
                 Explode();
             }
         }
 
         void OnTriggerEnter2D(Collider2D other)
         {
+            ModAPI.Notify($"TRIGGER with: {other.gameObject.name} (Layer: {other.gameObject.layer})");
+            
             // Backup trigger-based collision
             if (!hasExploded)
             {
-                ModAPI.Notify("Fireball trigger detected!");
                 Explode();
             }
         }
