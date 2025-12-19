@@ -1,6 +1,6 @@
 {
   "Name": "Tanker",
-  "Author": "KungRaseri",
+  "Author": "KungRaseri & BearRulerPC",
   "Description": "A Mod that adds a new entity type called the Tanker.",
   "ModVersion": "1.0",
   "GameVersion": "1.21+",
@@ -14,5 +14,5 @@
   ],
   "Active": true,
   "UGCIdentity": null,
-  "CreatorUGCIdentity": null
+  "CreatorUGCIdentity": "3626445477"
 }

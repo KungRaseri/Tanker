@@ -203,10 +203,13 @@ namespace Tanker
             rb.gravityScale = 0.2f; // Slight gravity
             rb.velocity = direction * 10f; // Launch speed
             rb.mass = 0.5f;
+            rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous; // Better collision detection
+            rb.bodyType = RigidbodyType2D.Dynamic;
 
             // Add collider
             CircleCollider2D collider = fireballObj.AddComponent<CircleCollider2D>();
-            collider.radius = 0.5f;
+            collider.radius = 0.15f; // Adjusted to match visual size better
+            collider.isTrigger = false; // Must be false for OnCollisionEnter2D to work
 
             // Add physical behavior for temperature/fire
             PhysicalBehaviour physicalBehaviour = fireballObj.AddComponent<PhysicalBehaviour>();
@@ -892,6 +895,17 @@ namespace Tanker
             // Explode on impact
             if (!hasExploded)
             {
+                ModAPI.Notify("Fireball collision detected!");
+                Explode();
+            }
+        }
+
+        void OnTriggerEnter2D(Collider2D other)
+        {
+            // Backup trigger-based collision
+            if (!hasExploded)
+            {
+                ModAPI.Notify("Fireball trigger detected!");
                 Explode();
             }
         }
