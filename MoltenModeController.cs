@@ -33,6 +33,10 @@ namespace Tanker
         private float heatAuraIgniteChance = 0.5f;
         private int heatAuraCycles = 0;
 
+        // Fireball system
+        private LimbBehaviour leftHandLimb;
+        private LimbBehaviour rightHandLimb;
+
         public void Initialize(PersonBehaviour person, TankerMod tankerMod,
                               Texture2D moltenTexture, Texture2D originalSkin,
                               Texture2D originalFlesh, Texture2D originalBone)
@@ -43,6 +47,264 @@ namespace Tanker
             this.originalSkin = originalSkin;
             this.originalFlesh = originalFlesh;
             this.originalBone = originalBone;
+
+            // Find hand limbs for fireball launching
+            FindHandLimbs();
+        }
+
+        private void FindHandLimbs()
+        {
+            if (person == null || person.Limbs == null) return;
+
+            // Search through all limbs to find the hands
+            for (int i = 0; i < person.Limbs.Length; i++)
+            {
+                var limb = person.Limbs[i];
+                if (limb == null) continue;
+
+                string limbName = limb.name.Trim().ToUpper();
+
+                // Check if this limb name contains ARM (to filter for arm limbs)
+                if (limbName.Contains("ARM"))
+                {
+                    // LOWERARMFRONT = left hand
+                    if (limbName.Contains("LOWERARM") && limbName.Contains("FRONT") && leftHandLimb == null)
+                    {
+                        leftHandLimb = limb;
+                        ModAPI.Notify($"✓ Found LEFT hand at index {i}: {limb.name}");
+                    }
+                    // LOWERARM (without FRONT, without UPPER) = right hand
+                    else if (limbName == "LOWERARM" && rightHandLimb == null)
+                    {
+                        rightHandLimb = limb;
+                        ModAPI.Notify($"✓ Found RIGHT hand at index {i}: {limb.name}");
+                    }
+                }
+            }
+
+            if (leftHandLimb != null && rightHandLimb != null)
+            {
+                ModAPI.Notify("✓ Both hands detected successfully!");
+            }
+            else if (leftHandLimb == null && rightHandLimb == null)
+            {
+                ModAPI.Notify("✗ WARNING: No hands found!");
+            }
+            else
+            {
+                ModAPI.Notify($"⚠ Only one hand found! Left: {leftHandLimb != null}, Right: {rightHandLimb != null}");
+            }
+        }
+        void Update()
+        {
+            // Check for fireball launch input (F key)
+            if (Input.GetKeyDown(KeyCode.F))
+            {
+                LaunchFireballFromHeldHand();
+            }
+        }
+
+        private void LaunchFireballFromHeldHand()
+        {
+            // Get mouse position
+            Vector3 mousePos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+            mousePos.z = 0;
+
+            // Check which hand is closest to mouse (within reasonable distance)
+            LimbBehaviour closestHand = null;
+            float closestDistance = float.MaxValue;
+            float maxDistance = 2f; // Maximum distance from mouse to hand
+
+            if (leftHandLimb != null)
+            {
+                float dist = Vector3.Distance(leftHandLimb.transform.position, mousePos);
+                if (dist < closestDistance && dist < maxDistance)
+                {
+                    closestDistance = dist;
+                    closestHand = leftHandLimb;
+                }
+            }
+
+            if (rightHandLimb != null)
+            {
+                float dist = Vector3.Distance(rightHandLimb.transform.position, mousePos);
+                if (dist < closestDistance && dist < maxDistance)
+                {
+                    closestDistance = dist;
+                    closestHand = rightHandLimb;
+                }
+            }
+
+            if (closestHand != null)
+            {
+                LaunchFireball(closestHand);
+            }
+            else
+            {
+                ModAPI.Notify("Move mouse near a hand and press F to launch fireball!");
+            }
+        }
+
+        private void LaunchFireball(LimbBehaviour handLimb)
+        {
+            if (handLimb == null) return;
+
+            // Get launch position from hand
+            Vector3 launchPosition = handLimb.transform.position;
+
+            // Calculate launch direction based on hand orientation/velocity
+            Vector2 launchDirection = CalculateLaunchDirection(handLimb);
+
+            // Create the fireball projectile
+            CreateFireball(launchPosition, launchDirection);
+
+            // Visual feedback
+            ModAPI.CreateParticleEffect("Flash", launchPosition);
+            ModAPI.Notify("Fireball launched!");
+        }
+
+        private Vector2 CalculateLaunchDirection(LimbBehaviour handLimb)
+        {
+            // Get mouse position in world space
+            Vector3 mousePos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+            mousePos.z = 0;
+
+            // Calculate direction from hand to mouse cursor
+            Vector2 direction = (mousePos - handLimb.transform.position).normalized;
+
+            return direction;
+        }
+
+        private void CreateFireball(Vector3 position, Vector2 direction)
+        {
+            // Create a physical fireball object
+            GameObject fireballObj = new GameObject("Fireball");
+            fireballObj.transform.position = position;
+
+            // Add visual components
+            SpriteRenderer spriteRenderer = fireballObj.AddComponent<SpriteRenderer>();
+            spriteRenderer.sprite = CreateFireballSprite();
+            spriteRenderer.color = new Color(1f, 0.3f, 0f, 1f); // Bright orange/red fire color
+            fireballObj.transform.localScale = Vector3.one * 0.3f;
+
+            // Add glow effect with another sprite renderer
+            GameObject glowObj = new GameObject("FireballGlow");
+            glowObj.transform.SetParent(fireballObj.transform);
+            glowObj.transform.localPosition = Vector3.zero;
+            glowObj.transform.localScale = Vector3.one * 1.5f;
+
+            SpriteRenderer glowRenderer = glowObj.AddComponent<SpriteRenderer>();
+            glowRenderer.sprite = CreateFireballSprite();
+            glowRenderer.color = new Color(1f, 0.6f, 0.1f, 0.5f); // Outer orange glow
+            glowRenderer.sortingOrder = -1; // Render behind main fireball
+
+            // Add physics
+            Rigidbody2D rb = fireballObj.AddComponent<Rigidbody2D>();
+            rb.gravityScale = 0.2f; // Slight gravity
+            rb.velocity = direction * 10f; // Launch speed
+            rb.mass = 0.5f;
+
+            // Add collider
+            CircleCollider2D collider = fireballObj.AddComponent<CircleCollider2D>();
+            collider.radius = 0.5f;
+
+            // Add physical behavior for temperature/fire
+            PhysicalBehaviour physicalBehaviour = fireballObj.AddComponent<PhysicalBehaviour>();
+            physicalBehaviour.InitialMass = 0.5f;
+            physicalBehaviour.Temperature = 1000f; // Very hot
+            physicalBehaviour.Charge = 0f;
+
+            // Add fireball behavior component
+            FireballBehavior fireballBehavior = fireballObj.AddComponent<FireballBehavior>();
+            fireballBehavior.Initialize(3f); // 3 second lifetime
+
+            // Create fire particle trail
+            CreateFireballParticles(fireballObj);
+        }
+
+        private Sprite CreateFireballSprite()
+        {
+            // Create a circular texture for the fireball with fire colors
+            int size = 32;
+            Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            Color[] pixels = new Color[size * size];
+
+            Vector2 center = new Vector2(size / 2f, size / 2f);
+            float radius = size / 2f;
+
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    Vector2 pos = new Vector2(x, y);
+                    float distance = Vector2.Distance(pos, center);
+
+                    if (distance <= radius)
+                    {
+                        float normalizedDist = distance / radius;
+                        float alpha = 1f - normalizedDist;
+                        alpha = Mathf.Pow(alpha, 0.6f); // Smooth falloff
+
+                        // Create fire gradient: white center -> yellow -> orange -> red
+                        Color fireColor;
+                        if (normalizedDist < 0.3f)
+                        {
+                            // Center: bright yellow-white
+                            fireColor = Color.Lerp(new Color(1f, 1f, 0.9f), new Color(1f, 0.9f, 0.3f), normalizedDist / 0.3f);
+                        }
+                        else if (normalizedDist < 0.6f)
+                        {
+                            // Middle: orange
+                            float t = (normalizedDist - 0.3f) / 0.3f;
+                            fireColor = Color.Lerp(new Color(1f, 0.9f, 0.3f), new Color(1f, 0.4f, 0f), t);
+                        }
+                        else
+                        {
+                            // Outer: red-orange
+                            float t = (normalizedDist - 0.6f) / 0.4f;
+                            fireColor = Color.Lerp(new Color(1f, 0.4f, 0f), new Color(0.8f, 0.1f, 0f), t);
+                        }
+
+                        pixels[y * size + x] = new Color(fireColor.r, fireColor.g, fireColor.b, alpha);
+                    }
+                    else
+                    {
+                        pixels[y * size + x] = Color.clear;
+                    }
+                }
+            }
+
+            texture.SetPixels(pixels);
+            texture.Apply();
+            texture.wrapMode = TextureWrapMode.Clamp;
+            texture.filterMode = FilterMode.Bilinear;
+
+            return Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
+        }
+
+        private void CreateFireballParticles(GameObject fireballObj)
+        {
+            GameObject particleGO = new GameObject("FireballParticles");
+            particleGO.transform.SetParent(fireballObj.transform);
+            particleGO.transform.localPosition = Vector3.zero;
+
+            // Simple particle effect using ModAPI
+            StartCoroutine(FireballTrailEffect(fireballObj));
+        }
+
+        private IEnumerator FireballTrailEffect(GameObject fireballObj)
+        {
+            float particleInterval = 0.05f;
+
+            while (fireballObj != null)
+            {
+                if (UnityEngine.Random.value < 0.8f)
+                {
+                    ModAPI.CreateParticleEffect("Flash", fireballObj.transform.position);
+                }
+
+                yield return new WaitForSeconds(particleInterval);
+            }
         }
 
         public void ToggleMoltenMode()
@@ -68,7 +330,6 @@ namespace Tanker
                 {
                     Position = person.transform.position,
                     CreateParticlesAndSound = true,
-                    LargeExplosionParticles = false,
                     DismemberChance = 0.50f,
                     FragmentForce = 4,
                     FragmentationRayCount = 16,
@@ -598,6 +859,100 @@ namespace Tanker
         {
             RemoveVaporParticles();
             StopHeatAura();
+        }
+    }
+
+    // Fireball behavior component to handle lifetime and impact
+    public class FireballBehavior : MonoBehaviour
+    {
+        private float lifetime = 3f;
+        private float elapsedTime = 0f;
+        private bool hasExploded = false;
+        private float explosionRadius = 2f;
+        private float explosionDamage = 5f;
+
+        public void Initialize(float lifetime)
+        {
+            this.lifetime = lifetime;
+        }
+
+        void Update()
+        {
+            elapsedTime += Time.deltaTime;
+
+            // Destroy after lifetime expires
+            if (elapsedTime >= lifetime && !hasExploded)
+            {
+                Explode();
+            }
+        }
+
+        void OnCollisionEnter2D(Collision2D collision)
+        {
+            // Explode on impact
+            if (!hasExploded)
+            {
+                Explode();
+            }
+        }
+
+        private void Explode()
+        {
+            if (hasExploded) return;
+            hasExploded = true;
+
+            Vector3 explosionPosition = transform.position;
+
+            // Create explosion effect
+            ExplosionCreator.Explode(new ExplosionCreator.ExplosionParameters
+            {
+                Position = explosionPosition,
+                CreateParticlesAndSound = true,
+                DismemberChance = 0.3f,
+                FragmentForce = 3f,
+                FragmentationRayCount = 12,
+                Range = explosionRadius
+            });
+
+            // Apply fire damage to nearby objects
+            Collider2D[] objectsInRange = Physics2D.OverlapCircleAll(explosionPosition, explosionRadius);
+            foreach (var collider in objectsInRange)
+            {
+                var limb = collider.GetComponent<LimbBehaviour>();
+                if (limb != null)
+                {
+                    limb.Damage(explosionDamage);
+
+                    var physicalBehaviour = limb.GetComponent<PhysicalBehaviour>();
+                    if (physicalBehaviour != null && UnityEngine.Random.value < 0.7f)
+                    {
+                        try
+                        {
+                            physicalBehaviour.Ignite(false);
+                        }
+                        catch { }
+                    }
+                }
+                else
+                {
+                    var physicalBehaviour = collider.GetComponent<PhysicalBehaviour>();
+                    if (physicalBehaviour != null)
+                    {
+                        physicalBehaviour.Temperature += 500f;
+                        if (UnityEngine.Random.value < 0.5f)
+                        {
+                            try
+                            {
+                                physicalBehaviour.Ignite(false);
+                            }
+                            catch { }
+                        }
+                    }
+                }
+            }
+
+            // Destroy the fireball object
+            Destroy(gameObject);
         }
     }
 }
